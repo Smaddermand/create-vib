@@ -1,4 +1,12 @@
-const BASE_STEPS = [
+type Step = {
+  label: string;
+  link: string;
+  linkLabel: string;
+};
+
+type Feature = "convex" | "clerk" | "ai" | "sentry" | "shadcn" | "ci";
+
+const BASE_STEPS: Step[] = [
   {
     label: "Run pnpm dev to start the local server",
     link: "https://nextjs.org/docs/app",
@@ -26,7 +34,7 @@ const BASE_STEPS = [
   },
 ];
 
-const FEATURE_STEPS = {
+const FEATURE_STEPS: Partial<Record<Feature, Step>> = {
   convex: {
     label: "Set up Convex backend",
     link: "https://docs.convex.dev/quickstart/nextjs",
@@ -54,7 +62,7 @@ const FEATURE_STEPS = {
   },
 };
 
-function renderStep({ label, link, linkLabel }, index) {
+function renderStep({ label, link, linkLabel }: Step, index: number): string {
   const stepId = `step-${index}`;
   return `            <li className="flex items-start gap-3 rounded-xl border border-slate-800 bg-slate-950/40 px-4 py-3">
               <input
@@ -76,12 +84,14 @@ function renderStep({ label, link, linkLabel }, index) {
             </li>`;
 }
 
-export function getVibStarterPage(features = []) {
+export function getVibStarterPage(features: Feature[] = []): string {
   const allSteps = [...BASE_STEPS];
 
   for (const feature of features) {
-    if (FEATURE_STEPS[feature]) {
-      allSteps.push(FEATURE_STEPS[feature]);
+    const featureStep = FEATURE_STEPS[feature];
+
+    if (featureStep) {
+      allSteps.push(featureStep);
     }
   }
 

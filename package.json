@@ -4,10 +4,18 @@
   "description": "Vib — AI SaaS project scaffold",
   "type": "module",
   "bin": {
-    "vib": "./bin/vib.js"
+    "vib": "./dist/bin/vib.js"
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "dev": "node bin/vib.js"
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "dev": "tsx bin/vib.ts",
+    "postbuild": "chmod +x dist/bin/vib.js",
+    "prepack": "pnpm build",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "keywords": [
     "cli",
@@ -24,5 +32,12 @@
     "fs-extra": "^11.3.4",
     "ora": "^9.1.0",
     "prompts": "^2.4.2"
+  },
+  "devDependencies": {
+    "@types/fs-extra": "^11.0.4",
+    "@types/node": "^24.6.1",
+    "@types/prompts": "^2.4.9",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
   }
 }
