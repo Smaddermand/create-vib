@@ -1,0 +1,28 @@
+{
+  "name": "create-vib",
+  "version": "0.0.1",
+  "description": "Vib — AI SaaS project scaffold",
+  "type": "module",
+  "bin": {
+    "vib": "./bin/vib.js"
+  },
+  "scripts": {
+    "dev": "node bin/vib.js"
+  },
+  "keywords": [
+    "cli",
+    "scaffold",
+    "nextjs",
+    "ai"
+  ],
+  "author": "",
+  "license": "MIT",
+  "packageManager": "pnpm@10.30.3",
+  "dependencies": {
+    "chalk": "^5.6.2",
+    "execa": "^9.6.1",
+    "fs-extra": "^11.3.4",
+    "ora": "^9.1.0",
+    "prompts": "^2.4.2"
+  }
+}
