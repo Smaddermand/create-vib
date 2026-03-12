@@ -26,6 +26,11 @@ type CommandError = {
   shortMessage?: string;
 };
 
+type ProjectTarget = {
+  projectDir: string;
+  projectName: string;
+};
+
 function showLogo(): void {
   console.log(
     chalk.cyan(`
@@ -57,6 +62,35 @@ function ensureProjectDirAvailable(projectDir: string): void {
   }
 }
 
+function resolveProjectTarget(projectNameInput: string): ProjectTarget {
+  const projectName = projectNameInput.trim();
+
+  if (!projectName) {
+    throw new Error("Project name is required.");
+  }
+
+  if (!/^[a-z0-9][a-z0-9._-]*$/.test(projectName)) {
+    throw new Error(
+      "Project name must use only lowercase letters, numbers, dots, dashes, or underscores.",
+    );
+  }
+
+  if (projectName === "." || projectName === "..") {
+    throw new Error("Project name must be a normal directory name.");
+  }
+
+  if (
+    path.isAbsolute(projectName) ||
+    projectName.includes("/") ||
+    projectName.includes("\\")
+  ) {
+    throw new Error("Project name must stay inside the current directory.");
+  }
+
+  const projectDir = path.join(process.cwd(), projectName);
+  return { projectDir, projectName };
+}
+
 function logCommandError(error: unknown): void {
   const { stderr = "", shortMessage = "" } =
     typeof error === "object" && error !== null ? (error as CommandError) : {};
@@ -67,8 +101,35 @@ function logCommandError(error: unknown): void {
   }
 }
 
+async function ensureGeneratedProjectScripts(projectDir: string): Promise<void> {
+  const packageJsonPath = path.join(projectDir, "package.json");
+  const packageJson = await fs.readJson(packageJsonPath);
+
+  packageJson.scripts ??= {};
+  packageJson.scripts.typecheck ??= "tsc --noEmit";
+
+  await fs.writeFile(
+    packageJsonPath,
+    `${JSON.stringify(packageJson, null, 2).trimEnd()}\n`,
+  );
+}
+
+async function cleanupProjectDir(projectDir: string | null): Promise<void> {
+  if (!projectDir || !fs.existsSync(projectDir)) {
+    return;
+  }
+
+  await fs.remove(projectDir);
+  console.error(
+    chalk.yellow(`\nRemoved incomplete project directory: ${projectDir}\n`),
+  );
+}
+
 async function run(): Promise<void> {
   showLogo();
+
+  let projectDir: string | null = null;
+  let shouldCleanupProjectDir = false;
 
   try {
     await ensurePnpmAvailable();
@@ -96,15 +157,18 @@ async function run(): Promise<void> {
       },
     ])) as PromptResponse;
 
-    const { projectName, features = [] } = response ?? {};
+    const { projectName: projectNameInput, features = [] } = response ?? {};
 
-    if (!projectName) {
+    if (!projectNameInput) {
       console.log(chalk.red("No project name provided."));
       process.exit(1);
     }
 
-    const projectDir = path.join(process.cwd(), projectName);
+    const { projectName, projectDir: resolvedProjectDir } =
+      resolveProjectTarget(projectNameInput);
+    projectDir = resolvedProjectDir;
     ensureProjectDirAvailable(projectDir);
+    shouldCleanupProjectDir = true;
 
     const createSpinner = ora("Creating Next.js project").start();
 
@@ -129,6 +193,7 @@ async function run(): Promise<void> {
       );
 
       createSpinner.succeed("Next.js project created");
+      await ensureGeneratedProjectScripts(projectDir);
     } catch (error) {
       createSpinner.fail("Next.js project failed");
       logCommandError(error);
@@ -335,6 +400,7 @@ export const model = openai("gpt-4o")
     }
 
     console.log(chalk.cyan("\nProject ready!\n"));
+    shouldCleanupProjectDir = false;
 
     const nextSteps = [`cd ${projectName}`, "pnpm dev"];
 
@@ -348,6 +414,10 @@ Next steps:
 ${nextSteps.join("\n")}
 `);
   } catch (error) {
+    if (shouldCleanupProjectDir) {
+      await cleanupProjectDir(projectDir);
+    }
+
     const message = error instanceof Error ? error.message : "Unexpected error";
     console.error(chalk.red(`\n${message}\n`));
     process.exit(1);

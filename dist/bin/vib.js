@@ -33,6 +33,25 @@ function ensureProjectDirAvailable(projectDir) {
         throw new Error(`Directory already exists: ${projectDir}`);
     }
 }
+function resolveProjectTarget(projectNameInput) {
+    const projectName = projectNameInput.trim();
+    if (!projectName) {
+        throw new Error("Project name is required.");
+    }
+    if (!/^[a-z0-9][a-z0-9._-]*$/.test(projectName)) {
+        throw new Error("Project name must use only lowercase letters, numbers, dots, dashes, or underscores.");
+    }
+    if (projectName === "." || projectName === "..") {
+        throw new Error("Project name must be a normal directory name.");
+    }
+    if (path.isAbsolute(projectName) ||
+        projectName.includes("/") ||
+        projectName.includes("\\")) {
+        throw new Error("Project name must stay inside the current directory.");
+    }
+    const projectDir = path.join(process.cwd(), projectName);
+    return { projectDir, projectName };
+}
 function logCommandError(error) {
     const { stderr = "", shortMessage = "" } = typeof error === "object" && error !== null ? error : {};
     const message = stderr || shortMessage;
@@ -40,8 +59,24 @@ function logCommandError(error) {
         console.error(chalk.red(`\n${message.trim()}\n`));
     }
 }
+async function ensureGeneratedProjectScripts(projectDir) {
+    const packageJsonPath = path.join(projectDir, "package.json");
+    const packageJson = await fs.readJson(packageJsonPath);
+    packageJson.scripts ??= {};
+    packageJson.scripts.typecheck ??= "tsc --noEmit";
+    await fs.writeFile(packageJsonPath, `${JSON.stringify(packageJson, null, 2).trimEnd()}\n`);
+}
+async function cleanupProjectDir(projectDir) {
+    if (!projectDir || !fs.existsSync(projectDir)) {
+        return;
+    }
+    await fs.remove(projectDir);
+    console.error(chalk.yellow(`\nRemoved incomplete project directory: ${projectDir}\n`));
+}
 async function run() {
     showLogo();
+    let projectDir = null;
+    let shouldCleanupProjectDir = false;
     try {
         await ensurePnpmAvailable();
         const response = (await prompts([
@@ -66,13 +101,15 @@ async function run() {
                 ],
             },
         ]));
-        const { projectName, features = [] } = response ?? {};
-        if (!projectName) {
+        const { projectName: projectNameInput, features = [] } = response ?? {};
+        if (!projectNameInput) {
             console.log(chalk.red("No project name provided."));
             process.exit(1);
         }
-        const projectDir = path.join(process.cwd(), projectName);
+        const { projectName, projectDir: resolvedProjectDir } = resolveProjectTarget(projectNameInput);
+        projectDir = resolvedProjectDir;
         ensureProjectDirAvailable(projectDir);
+        shouldCleanupProjectDir = true;
         const createSpinner = ora("Creating Next.js project").start();
         try {
             createSpinner.stop();
@@ -90,6 +127,7 @@ async function run() {
                 "--use-pnpm",
             ], { stdio: "inherit" });
             createSpinner.succeed("Next.js project created");
+            await ensureGeneratedProjectScripts(projectDir);
         }
         catch (error) {
             createSpinner.fail("Next.js project failed");
@@ -239,6 +277,7 @@ export const model = openai("gpt-4o")
             throw error;
         }
         console.log(chalk.cyan("\nProject ready!\n"));
+        shouldCleanupProjectDir = false;
         const nextSteps = [`cd ${projectName}`, "pnpm dev"];
         if (features.includes("convex")) {
             nextSteps.push("pnpm dlx convex@latest dev");
@@ -250,6 +289,9 @@ ${nextSteps.join("\n")}
 `);
     }
     catch (error) {
+        if (shouldCleanupProjectDir) {
+            await cleanupProjectDir(projectDir);
+        }
         const message = error instanceof Error ? error.message : "Unexpected error";
         console.error(chalk.red(`\n${message}\n`));
         process.exit(1);
